@@ -1,0 +1,438 @@
+{
+  "query": {
+    "bool": {
+      "filter": {
+        "bool": {
+          "must": [
+            {
+              "terms": {
+                "availability": [
+                  1,
+                  2
+                ]
+              }
+            },
+            {
+              "terms": {
+                "visibility": [
+                  3,
+                  4
+                ]
+              }
+            },
+            {
+              "term": {
+                "status": 1
+              }
+            },
+            {
+              "nested": {
+                "path": "spf",
+                "inner_hits": {
+                  "_source": [
+                    "spf.spid",
+                    "spf.store_id",
+                    "spf.store_level",
+                    "spf.support_p2h_delivery",
+                    "spf.rating_summary",
+                    "spf.reviews_count",
+                    "spf.all_time_quantity_sold",
+                    "spf.seller_asa_cashback_vnd",
+                    "spf.price",
+                    "spf.warehouses",
+                    "spf.availability"
+                  ],
+                  "size": 1,
+                  "sort": [
+                    {
+                      "spf.availability": "asc"
+                    },
+                    {
+                      "_script": {
+                        "type": "number",
+                        "script": {
+                          "lang": "painless",
+                          "source": " long price_max = (doc['spf.price_max'].size() > 0 && doc['spf.price_max'].value > 100) ? doc['spf.price_max'].value : 100; long sales_max = (doc['spf.all_time_quantity_sold_max'].size() > 0 && doc['spf.all_time_quantity_sold_max'].value > 0) ? doc['spf.all_time_quantity_sold_max'].value : 1; long price = (doc['spf.price'].size() > 0) ? doc['spf.price'].value : 1000000000; long seller_asa_cashback_vnd = (doc['spf.seller_asa_cashback_vnd'].size() > 0) ? doc['spf.seller_asa_cashback_vnd'].value : 0; long sales = (doc['spf.all_time_quantity_sold'].size() > 0) ? doc['spf.all_time_quantity_sold'].value : 0; long reviews_count = (doc['spf.reviews_count'].size() > 0) ? doc['spf.reviews_count'].value : 0; long rating = (doc['spf.rating_summary'].size() > 0) ? doc['spf.rating_summary'].value : 0; long spid = (doc['spf.spid'].size() > 0) ? doc['spf.spid'].value : 0; String store_level = (doc['spf.store_level'].size() > 0) ? doc['spf.store_level'].value : \"\"; boolean support_p2h_delivery = (doc['spf.support_p2h_delivery'].size() > 0 && doc['spf.support_p2h_delivery'].value == '1') ? true : false; long price_step = price_max / 100; long price_adjusted = (long) price + (long) Math.abs((spid + params.seed).hashCode()) % price_step; long low_rating_penalty = 0; if (reviews_count > 10 && rating > 0 && rating < 60) { low_rating_penalty = (rating <= 40) ? 100 * price_step : 75 * price_step; } long low_sales_penalty = (sales < 5) ? 3 * price_step : 0; long non_trusted_penalty = 0; if (store_level != \"OFFICIAL_STORE\") { non_trusted_penalty = (store_level != \"TRUSTED_STORE\") ? 50 * price_step : 30 * price_step; } long slow_shipping_penalty = 0; if (!params.has_location_code) { slow_shipping_penalty = support_p2h_delivery ? 0 : 50 * price_step; } else { boolean has_p2h_delivery = false; boolean has_next_day_delivery = false; if (doc['spf.warehouses'].size() > 0) { has_p2h_delivery = support_p2h_delivery && !Collections.disjoint(params.warehouses, doc['spf.warehouses']); has_next_day_delivery = !Collections.disjoint(params.warehouses_next_day, doc['spf.warehouses']); } if (!has_p2h_delivery) { slow_shipping_penalty = has_next_day_delivery ? 30 * price_step : 50 * price_step; } } long price_bin = (price_adjusted - seller_asa_cashback_vnd + low_rating_penalty + non_trusted_penalty + low_sales_penalty + slow_shipping_penalty) / price_step; long max_price_bin = price_max / price_step; float normalized_price_bin = (float) price_bin / max_price_bin; float normalized_sales_qty = 1 - (float) sales / sales_max; return 1000 * normalized_price_bin + normalized_sales_qty; ",
+                          "params": {
+                            "seed": -736547692,
+                            "has_location_code": true,
+                            "warehouses": [
+                              "19"
+                            ],
+                            "warehouses_next_day": []
+                          }
+                        },
+                        "order": "asc"
+                      }
+                    }
+                  ]
+                },
+                "query": {
+                  "bool": {
+                    "must": [
+                      {
+                        "bool": {
+                          "should": [
+                            {
+                              "bool": {
+                                "must_not": {
+                                  "exists": {
+                                    "field": "spf.shipping_region_limited"
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "term": {
+                                "spf.shipping_region_limited": false
+                              }
+                            },
+                            {
+                              "bool": {
+                                "filter": [
+                                  {
+                                    "term": {
+                                      "spf.shipping_region_limited": true
+                                    }
+                                  },
+                                  {
+                                    "terms": {
+                                      "spf.shipping_region_codes": [
+                                        "VN034",
+                                        "VN034024",
+                                        "VN034024013"
+                                      ]
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "should": [
+        {
+          "multi_match": {
+            "query": "sữa công thức pha sẵn",
+            "type": "most_fields",
+            "operator": "or",
+            "minimum_should_match": "50%",
+            "fields": [
+              "searchable_name^10",
+              "searchable_seller_name^1"
+            ]
+          }
+        },
+        {
+          "bool": {
+            "filter": {
+              "bool": {
+                "must": {
+                  "terms": {
+                    "productset_id": [
+                      2135
+                    ]
+                  }
+                }
+              }
+            },
+            "must": {
+              "multi_match": {
+                "query": "sữa công thức pha sẵn",
+                "type": "most_fields",
+                "operator": "or",
+                "minimum_should_match": "30%",
+                "fields": [
+                  "searchable_name^10",
+                  "searchable_seller_name^1"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "multi_match": {
+            "query": "sữa công thức pha sẵn",
+            "type": "most_fields",
+            "operator": "or",
+            "minimum_should_match": "30%",
+            "fields": [
+              "searchable_name^10",
+              "searchable_seller_name^1"
+            ]
+          }
+        },
+        {
+          "terms": {
+            "productset_id": [
+              2135
+            ]
+          }
+        },
+        {
+          "terms": {
+            "category.id": []
+          }
+        },
+        {
+          "terms": {
+            "category.id": [
+              10419
+            ]
+          }
+        }
+      ],
+      "minimum_should_match": 1
+    }
+  },
+  "aggs": {
+    "seller": {
+      "aggs": {
+        "name": {
+          "nested": {
+            "path": "spf"
+          },
+          "aggs": {
+            "value": {
+              "terms": {
+                "field": "spf.seller_id",
+                "size": 30
+              }
+            }
+          }
+        }
+      },
+      "filter": {
+        "bool": {
+          "should": [
+            {
+              "terms": {
+                "productset_id": [
+                  2135
+                ]
+              }
+            },
+            {
+              "terms": {
+                "primary_category.id": [
+                  10419
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "support_p2h_delivery": {
+      "terms": {
+        "field": "support_p2h_delivery",
+        "include": [
+          1
+        ],
+        "size": 30
+      }
+    },
+    "is_cross_border": {
+      "terms": {
+        "field": "is_cross_border",
+        "size": 30
+      }
+    },
+    "age_range_baby": {
+      "terms": {
+        "field": "age_range_baby.value",
+        "size": 30
+      }
+    },
+    "weight_for_diaper": {
+      "terms": {
+        "field": "weight_for_diaper.value",
+        "size": 30
+      }
+    },
+    "support_next_day_delivery": {
+      "terms": {
+        "field": "support_next_day_delivery.value",
+        "size": 30
+      }
+    },
+    "support_installment": {
+      "nested": {
+        "path": "spf"
+      },
+      "aggs": {
+        "name": {
+          "terms": {
+            "field": "spf.support_installment",
+            "include": [
+              "1"
+            ],
+            "size": 30
+          }
+        }
+      }
+    },
+    "seller_asa_cashback": {
+      "nested": {
+        "path": "spf"
+      },
+      "aggs": {
+        "name": {
+          "terms": {
+            "field": "spf.seller_asa_cashback",
+            "include": [
+              "1"
+            ],
+            "size": 30
+          }
+        }
+      }
+    },
+    "option_color": {
+      "nested": {
+        "path": "spf"
+      },
+      "aggs": {
+        "name": {
+          "terms": {
+            "field": "spf.option_color",
+            "exclude": [
+              "Xanh"
+            ],
+            "size": 30
+          }
+        }
+      }
+    },
+    "container_type": {
+      "nested": {
+        "path": "container_type"
+      },
+      "aggs": {
+        "name": {
+          "terms": {
+            "field": "container_type.value",
+            "size": 30
+          }
+        }
+      }
+    },
+    "price_percentiles": {
+      "aggs": {
+        "name": {
+          "nested": {
+            "path": "spf"
+          },
+          "aggs": {
+            "filtered": {
+              "percentiles": {
+                "field": "spf.price",
+                "percents": [
+                  20,
+                  60,
+                  90
+                ]
+              }
+            }
+          }
+        }
+      },
+      "filter": {
+        "bool": {
+          "should": [
+            {
+              "terms": {
+                "productset_id": [
+                  2135
+                ]
+              }
+            },
+            {
+              "terms": {
+                "primary_category.id": [
+                  10419
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "category": {
+      "terms": {
+        "field": "primary_category.id",
+        "size": 5
+      }
+    },
+    "is_inventory_clearance_sale": {
+      "nested": {
+        "path": "spf"
+      },
+      "aggs": {
+        "name": {
+          "terms": {
+            "field": "spf.is_inventory_clearance_sale",
+            "include": [
+              "1"
+            ],
+            "size": 30
+          }
+        }
+      }
+    },
+    "brand": {
+      "aggs": {
+        "filtered": {
+          "terms": {
+            "field": "brand.value",
+            "exclude": [
+              "OEM"
+            ],
+            "size": 30
+          },
+          "aggs": {
+            "url_key": {
+              "terms": {
+                "field": "brand.url_key"
+              }
+            },
+            "id": {
+              "terms": {
+                "field": "brand.id"
+              }
+            }
+          }
+        }
+      },
+      "filter": {
+        "bool": {
+          "should": [
+            {
+              "terms": {
+                "productset_id": [
+                  2135
+                ]
+              }
+            },
+            {
+              "terms": {
+                "primary_category.id": [
+                  10419
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "size": 0
+}
